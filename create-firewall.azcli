@@ -103,14 +103,17 @@ az network vnet peering create --resource-group $rg --name hub-to-spoke1-peering
 az network vnet peering create --resource-group $rg --name spoke1-to-hub-peering --vnet-name cake-spoke1-vnet --remote-vnet cake-hub-vnet --allow-vnet-access --allow-forwarded-traffic
 
 ## CREATE FIREWALL RESOURCES
+
+# Install extensions without prompt
+az config set extension.use_dymanic_install=yes_without_prompt
 # Create AzureFirewallSubnet for hub-vnet
-az network subnet create --resource-group $rg --vnet-name cake-hub-vnet --name AzureFirewallSubnet --address-prefix 10.60.1.0/26
+az network vnet subnet create --resource-group $rg --vnet-name cake-hub-vnet --name AzureFirewallSubnet --address-prefix 10.60.1.0/26
 
 # Create cake-hub-firewall-01
 az network firewall create --resource-group $rg --name cake-hub-firewall-01 --location $location --vnet cake-hub-vnet --subnet hub-subnet-01 --direction Inbound --action Allow --protocol Tcp --source-port-ranges 22,80 --destination-port-ranges 22,80 --priority 110
 
 # Create Firewall PIP for cake-hub-firewall-01
-az network public-ip create --resource-group $rg --name cake-hub-firewall-pip-01 --location $location --allocation-method Static --sku Standard
+az network public-ip create --resource-group $rg --name cake-hub-firewall-pip-01 --location $location --allocation-method Static --sku Standard --zone 
 
 # Create Firewall IP Config for cake-hub-firewall-01
 az network firewall ip-config create --resource-group $rg --firewall-name cake-hub-firewall-01 --name cake-hub-firewall-ip-config --public-ip-address cake-hub-firewall-pip-01 --vnet-name cake-hub-vnet
