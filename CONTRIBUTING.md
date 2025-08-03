@@ -28,7 +28,7 @@ Every template must follow this exact structure:
 # Category: [category-name]
 # Estimated Cost: [Monthly cost estimate in USD]
 # Deployment Time: [Expected deployment duration]
-# Disclaimer: This script is intended for ACG Azure Cloud Sandbox environments
+# Disclaimer: This script is intended for Azure sandbox/learning environments
 ###############################
 
 ##############################
@@ -79,7 +79,7 @@ echo "====================="
 - **Category**: Must match directory structure
 - **Estimated Cost**: Monthly cost in USD (use ranges like $10-30)
 - **Deployment Time**: Realistic time estimate
-- **Disclaimer**: Include ACG disclaimer for sandbox usage
+- **Disclaimer**: Include disclaimer for sandbox/learning usage
 
 ### 2. Variables Section
 - **Resource Group**: Always use `$(az group list --query '[].name' -o tsv)`
@@ -124,7 +124,7 @@ echo "====================="
 
 Before submitting a template:
 
-1. **Test in ACG Environment**: Verify the template works in a fresh ACG sandbox
+1. **Test in Sandbox Environment**: Verify the template works in a fresh Azure sandbox
 2. **Validate Output**: Ensure all resources are created correctly
 3. **Check URLs**: Verify all provided URLs and portal links work
 4. **Cost Validation**: Confirm cost estimates are reasonable

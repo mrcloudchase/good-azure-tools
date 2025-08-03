@@ -114,8 +114,8 @@ Each template follows a consistent structure:
 
 ## 🛠️ Customization Guidelines
 
-### For ACG Azure Cloud Sandbox:
-Most templates are pre-configured for ACG environments with automatic resource group detection:
+### For Azure Sandbox/Learning Environments:
+Most templates are pre-configured for sandbox environments with automatic resource group detection:
 ```bash
 $rg = az group list --query '[].name' -o tsv
 $location = az group list --query '[].location' -o tsv
@@ -158,7 +158,7 @@ We welcome contributions! Please follow these guidelines:
 - [ ] Includes comprehensive comments
 - [ ] Has variable definitions at the top
 - [ ] Includes error handling where appropriate
-- [ ] Tested in ACG environment
+- [ ] Tested in sandbox environment
 - [ ] Documentation added to README
 
 ## 📝 License
