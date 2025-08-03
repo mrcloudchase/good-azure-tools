@@ -1,0 +1,230 @@
+#!/bin/bash
+###############################
+####### SCRIPT DETAILS ########
+# Name: LAMP Stack Deployment
+# Purpose: Deploy Linux, Apache, MySQL, PHP web application stack
+# Category: web-apps
+# Estimated Cost: $20-50/month (Basic tier)
+# Deployment Time: 5-10 minutes
+# Disclaimer: This script is intended for Azure sandbox/learning environments
+###############################
+
+##############################
+##### START - VARIABLES ######
+##############################
+
+# Get resource group and set to variable $rg
+$rg = az group list --query '[].name' -o tsv
+
+# Assign location variable to playground resource group location
+$location = az group list --query '[].location' -o tsv
+
+# Database configuration
+$dbServerName = "lamp-mysql-$(Get-Random -Minimum 1000 -Maximum 9999)"
+$dbName = "lampdb"
+$dbAdminUser = "lampadmin"
+$dbPassword = "LampStack123!"
+
+# Web app configuration
+$webAppName = "lamp-webapp-$(Get-Random -Minimum 1000 -Maximum 9999)"
+$appServicePlan = "lamp-asp"
+
+##############################
+##### END - VARIABLES ########
+##############################
+
+##############################
+####### START - SCRIPT #######
+##############################
+
+echo "🚀 Starting LAMP Stack deployment..."
+
+## CREATE MYSQL DATABASE
+echo "📊 Creating MySQL Database Server..."
+
+# Create MySQL Flexible Server
+az mysql flexible-server create `
+    --resource-group $rg `
+    --name $dbServerName `
+    --location $location `
+    --admin-user $dbAdminUser `
+    --admin-password $dbPassword `
+    --sku-name Standard_B1ms `
+    --tier Burstable `
+    --public-access 0.0.0.0 `
+    --storage-size 20 `
+    --version 8.0.21
+
+# Create database
+az mysql flexible-server db create `
+    --resource-group $rg `
+    --server-name $dbServerName `
+    --database-name $dbName
+
+echo "✅ MySQL Database created successfully!"
+
+## CREATE APP SERVICE PLAN
+echo "🖥️ Creating App Service Plan..."
+
+az appservice plan create `
+    --resource-group $rg `
+    --name $appServicePlan `
+    --location $location `
+    --sku B1 `
+    --is-linux
+
+echo "✅ App Service Plan created!"
+
+## CREATE WEB APP
+echo "🌐 Creating Web App..."
+
+az webapp create `
+    --resource-group $rg `
+    --plan $appServicePlan `
+    --name $webAppName `
+    --runtime "PHP|8.1"
+
+echo "✅ Web App created!"
+
+## CONFIGURE WEB APP SETTINGS
+echo "⚙️ Configuring Web App settings..."
+
+# Set database connection strings
+az webapp config appsettings set `
+    --resource-group $rg `
+    --name $webAppName `
+    --settings `
+        DB_HOST="$dbServerName.mysql.database.azure.com" `
+        DB_NAME="$dbName" `
+        DB_USER="$dbAdminUser" `
+        DB_PASSWORD="$dbPassword" `
+        DB_PORT="3306"
+
+# Enable logging
+az webapp log config `
+    --resource-group $rg `
+    --name $webAppName `
+    --application-logging filesystem `
+    --level information
+
+echo "✅ Web App configured!"
+
+## CREATE SAMPLE PHP APPLICATION
+echo "📝 Deploying sample PHP application..."
+
+# Create a simple PHP application file
+$phpContent = @"
+<?php
+`$servername = getenv('DB_HOST');
+`$username = getenv('DB_USER');
+`$password = getenv('DB_PASSWORD');
+`$dbname = getenv('DB_NAME');
+
+try {
+    `$pdo = new PDO("mysql:host=`$servername;dbname=`$dbname", `$username, `$password);
+    `$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    
+    // Create users table if it doesn't exist
+    `$sql = "CREATE TABLE IF NOT EXISTS users (
+        id INT(6) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        firstname VARCHAR(30) NOT NULL,
+        lastname VARCHAR(30) NOT NULL,
+        email VARCHAR(50),
+        reg_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )";
+    `$pdo->exec(`$sql);
+    
+    // Insert sample data
+    `$stmt = `$pdo->prepare("INSERT INTO users (firstname, lastname, email) VALUES (?, ?, ?)");
+    `$stmt->execute(['John', 'Doe', 'john@example.com']);
+    `$stmt->execute(['Jane', 'Smith', 'jane@example.com']);
+    
+    // Fetch and display users
+    `$stmt = `$pdo->query("SELECT * FROM users");
+    `$users = `$stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    echo "<h1>🎉 LAMP Stack is Working!</h1>";
+    echo "<h2>Database Connection: ✅ Successful</h2>";
+    echo "<h3>Sample Users from MySQL:</h3>";
+    echo "<table border='1'>";
+    echo "<tr><th>ID</th><th>First Name</th><th>Last Name</th><th>Email</th><th>Registration Date</th></tr>";
+    
+    foreach(`$users as `$user) {
+        echo "<tr>";
+        echo "<td>" . `$user['id'] . "</td>";
+        echo "<td>" . `$user['firstname'] . "</td>";
+        echo "<td>" . `$user['lastname'] . "</td>";
+        echo "<td>" . `$user['email'] . "</td>";
+        echo "<td>" . `$user['reg_date'] . "</td>";
+        echo "</tr>";
+    }
+    echo "</table>";
+    
+    echo "<p><strong>Server Info:</strong></p>";
+    echo "<ul>";
+    echo "<li>PHP Version: " . phpversion() . "</li>";
+    echo "<li>Server: " . `$_SERVER['SERVER_SOFTWARE'] . "</li>";
+    echo "<li>Database: MySQL " . `$pdo->getAttribute(PDO::ATTR_SERVER_VERSION) . "</li>";
+    echo "</ul>";
+    
+} catch(PDOException `$e) {
+    echo "❌ Connection failed: " . `$e->getMessage();
+}
+?>
+"@
+
+# Save PHP content to file
+$phpContent | Out-File -FilePath "index.php" -Encoding UTF8
+
+# Deploy to web app using ZIP deployment
+Compress-Archive -Path "index.php" -DestinationPath "app.zip" -Force
+
+az webapp deployment source config-zip `
+    --resource-group $rg `
+    --name $webAppName `
+    --src "app.zip"
+
+# Clean up local files
+Remove-Item "index.php", "app.zip" -Force
+
+echo "✅ Sample application deployed!"
+
+## CONFIGURE FIREWALL RULES
+echo "🔒 Configuring database firewall..."
+
+# Allow Azure services to access the database
+az mysql flexible-server firewall-rule create `
+    --resource-group $rg `
+    --name $dbServerName `
+    --rule-name "AllowAzureServices" `
+    --start-ip-address 0.0.0.0 `
+    --end-ip-address 0.0.0.0
+
+echo "✅ Firewall rules configured!"
+
+## OUTPUT INFORMATION
+echo ""
+echo "🎉 LAMP Stack deployment completed successfully!"
+echo ""
+echo "📋 Deployment Summary:"
+echo "====================="
+echo "Web App URL: https://$webAppName.azurewebsites.net"
+echo "Database Server: $dbServerName.mysql.database.azure.com"
+echo "Database Name: $dbName"
+echo "Database User: $dbAdminUser"
+echo ""
+echo "🔧 Management URLs:"
+echo "Web App: https://portal.azure.com/#resource/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$rg/providers/Microsoft.Web/sites/$webAppName"
+echo "Database: https://portal.azure.com/#resource/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$rg/providers/Microsoft.DBforMySQL/flexibleServers/$dbServerName"
+echo ""
+echo "⚠️ Important Notes:"
+echo "- Database password is set to: $dbPassword"
+echo "- Change the database password for production use"
+echo "- Consider using Azure Key Vault for secrets management"
+echo "- The sample app creates a 'users' table with sample data"
+echo ""
+echo "🌟 Visit your web app URL to see the LAMP stack in action!"
+
+##############################
+######## END - SCRIPT ########
+##############################
