@@ -1,0 +1,283 @@
+#!/bin/bash
+###############################
+####### SCRIPT DETAILS ########
+# Name: Azure Key Vault Setup
+# Purpose: Deploy secure secrets management with Azure Key Vault
+# Category: security
+# Estimated Cost: $1-5/month (depends on operations)
+# Deployment Time: 3-5 minutes
+# Disclaimer: This script is intended for ACG Azure Cloud Sandbox environments
+###############################
+
+##############################
+##### START - VARIABLES ######
+##############################
+
+# Get resource group and set to variable $rg
+rg=$(az group list --query '[].name' -o tsv)
+
+# Assign location variable to playground resource group location
+location=$(az group list --query '[].location' -o tsv)
+
+# Key Vault configuration
+keyVaultName="kv-$(shuf -i 10000-99999 -n 1)"
+skuName="standard"
+
+# Get current user for access policy
+currentUserId=$(az ad signed-in-user show --query id -o tsv)
+
+##############################
+##### END - VARIABLES ########
+##############################
+
+##############################
+####### START - SCRIPT #######
+##############################
+
+echo "🚀 Starting Key Vault deployment..."
+
+## CREATE KEY VAULT
+echo "🔐 Creating Key Vault..."
+az keyvault create \
+    --resource-group $rg \
+    --name $keyVaultName \
+    --location $location \
+    --sku $skuName \
+    --enabled-for-deployment true \
+    --enabled-for-disk-encryption true \
+    --enabled-for-template-deployment true \
+    --enable-soft-delete true \
+    --retention-days 7
+
+echo "✅ Key Vault created!"
+
+## SET ACCESS POLICY FOR CURRENT USER
+echo "👤 Setting access policy for current user..."
+az keyvault set-policy \
+    --name $keyVaultName \
+    --object-id $currentUserId \
+    --secret-permissions get list set delete backup restore recover purge \
+    --key-permissions get list create delete backup restore recover purge import \
+    --certificate-permissions get list create delete managecontacts getissuers listissuers setissuers deleteissuers manageissuers recover purge
+
+echo "✅ Access policy configured!"
+
+## CREATE SAMPLE SECRETS
+echo "🔑 Creating sample secrets..."
+
+# Database connection string
+az keyvault secret set \
+    --vault-name $keyVaultName \
+    --name "DatabaseConnectionString" \
+    --value "Server=myserver.database.windows.net;Database=mydb;User Id=myuser;Password=MySecretPassword123!;"
+
+# API key
+az keyvault secret set \
+    --vault-name $keyVaultName \
+    --name "ThirdPartyAPIKey" \
+    --value "api-key-$(openssl rand -hex 16)"
+
+# Application password
+az keyvault secret set \
+    --vault-name $keyVaultName \
+    --name "ApplicationPassword" \
+    --value "$(openssl rand -base64 32)"
+
+# Storage account key placeholder
+az keyvault secret set \
+    --vault-name $keyVaultName \
+    --name "StorageAccountKey" \
+    --value "DefaultEndpointsProtocol=https;AccountName=mystorageaccount;AccountKey=$(openssl rand -base64 64);EndpointSuffix=core.windows.net"
+
+echo "✅ Sample secrets created!"
+
+## CREATE SAMPLE KEYS
+echo "🔑 Creating sample keys..."
+
+# RSA key for encryption
+az keyvault key create \
+    --vault-name $keyVaultName \
+    --name "DataEncryptionKey" \
+    --kty RSA \
+    --size 2048 \
+    --ops encrypt decrypt sign verify
+
+# EC key for signing
+az keyvault key create \
+    --vault-name $keyVaultName \
+    --name "SigningKey" \
+    --kty EC \
+    --curve P-256 \
+    --ops sign verify
+
+echo "✅ Sample keys created!"
+
+## ENABLE DIAGNOSTIC SETTINGS
+echo "📊 Configuring diagnostic settings..."
+
+# Create Log Analytics workspace for monitoring
+logWorkspaceName="kv-logs-workspace"
+az monitor log-analytics workspace create \
+    --resource-group $rg \
+    --workspace-name $logWorkspaceName \
+    --location $location
+
+# Get workspace ID
+workspaceId=$(az monitor log-analytics workspace show \
+    --resource-group $rg \
+    --workspace-name $logWorkspaceName \
+    --query id -o tsv)
+
+# Configure diagnostic settings
+az monitor diagnostic-settings create \
+    --resource "/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$rg/providers/Microsoft.KeyVault/vaults/$keyVaultName" \
+    --name "KeyVaultDiagnostics" \
+    --workspace $workspaceId \
+    --logs '[
+        {
+            "category": "AuditEvent",
+            "enabled": true,
+            "retentionPolicy": {
+                "enabled": true,
+                "days": 30
+            }
+        }
+    ]' \
+    --metrics '[
+        {
+            "category": "AllMetrics",
+            "enabled": true,
+            "retentionPolicy": {
+                "enabled": true,
+                "days": 30
+            }
+        }
+    ]'
+
+echo "✅ Diagnostic settings configured!"
+
+## CREATE CERTIFICATE (OPTIONAL)
+echo "📜 Creating sample certificate..."
+az keyvault certificate create \
+    --vault-name $keyVaultName \
+    --name "SampleCertificate" \
+    --policy '{
+        "issuerParameters": {
+            "name": "Self"
+        },
+        "keyProperties": {
+            "exportable": true,
+            "keySize": 2048,
+            "keyType": "RSA",
+            "reuseKey": false
+        },
+        "secretProperties": {
+            "contentType": "application/x-pkcs12"
+        },
+        "x509CertificateProperties": {
+            "subject": "CN=sample.company.com",
+            "validityInMonths": 12,
+            "keyUsage": [
+                "digitalSignature",
+                "keyEncipherment"
+            ],
+            "ekus": [
+                "1.3.6.1.5.5.7.3.1",
+                "1.3.6.1.5.5.7.3.2"
+            ]
+        }
+    }'
+
+echo "✅ Sample certificate created!"
+
+## GET KEY VAULT INFORMATION
+keyVaultUri=$(az keyvault show --name $keyVaultName --resource-group $rg --query properties.vaultUri -o tsv)
+tenantId=$(az account show --query tenantId -o tsv)
+
+## OUTPUT INFORMATION
+echo ""
+echo "🎉 Key Vault deployment completed successfully!"
+echo ""
+echo "📋 Deployment Summary:"
+echo "====================="
+echo "Key Vault Name: $keyVaultName"
+echo "Key Vault URI: $keyVaultUri"
+echo "SKU: $skuName"
+echo "Location: $location"
+echo "Tenant ID: $tenantId"
+echo ""
+echo "🔐 Created Resources:"
+echo "==================="
+echo "✓ Key Vault with soft delete enabled"
+echo "✓ Access policy for current user"
+echo "✓ Sample secrets (4 items)"
+echo "✓ Sample keys (2 items)"
+echo "✓ Sample certificate"
+echo "✓ Diagnostic logging"
+echo "✓ Log Analytics workspace"
+echo ""
+echo "🔑 Sample Secrets Created:"
+echo "=========================="
+echo "• DatabaseConnectionString"
+echo "• ThirdPartyAPIKey"
+echo "• ApplicationPassword"
+echo "• StorageAccountKey"
+echo ""
+echo "🗝️ Sample Keys Created:"
+echo "======================"
+echo "• DataEncryptionKey (RSA-2048)"
+echo "• SigningKey (EC-P256)"
+echo ""
+echo "📜 Certificates:"
+echo "==============="
+echo "• SampleCertificate (Self-signed, 12 months)"
+echo ""
+echo "🔧 Management Commands:"
+echo "========================"
+echo "Retrieve a secret:"
+echo "  az keyvault secret show --vault-name $keyVaultName --name DatabaseConnectionString"
+echo ""
+echo "Set a new secret:"
+echo "  az keyvault secret set --vault-name $keyVaultName --name MySecret --value MyValue"
+echo ""
+echo "List all secrets:"
+echo "  az keyvault secret list --vault-name $keyVaultName --output table"
+echo ""
+echo "List all keys:"
+echo "  az keyvault key list --vault-name $keyVaultName --output table"
+echo ""
+echo "Backup a secret:"
+echo "  az keyvault secret backup --vault-name $keyVaultName --name MySecret --file backup.blob"
+echo ""
+echo "🔗 Portal Links:"
+echo "Key Vault: https://portal.azure.com/#resource/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$rg/providers/Microsoft.KeyVault/vaults/$keyVaultName"
+echo "Monitoring: https://portal.azure.com/#resource/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$rg/providers/Microsoft.OperationalInsights/workspaces/$logWorkspaceName"
+echo ""
+echo "💻 Application Integration Examples:"
+echo "===================================="
+echo ""
+echo "PowerShell:"
+echo "  \$secret = Get-AzKeyVaultSecret -VaultName '$keyVaultName' -Name 'DatabaseConnectionString'"
+echo "  \$connectionString = \$secret.SecretValueText"
+echo ""
+echo "Azure CLI:"
+echo "  SECRET=\$(az keyvault secret show --vault-name $keyVaultName --name DatabaseConnectionString --query value -o tsv)"
+echo ""
+echo "REST API:"
+echo "  GET $keyVaultUri/secrets/DatabaseConnectionString?api-version=7.3"
+echo "  Authorization: Bearer <access_token>"
+echo ""
+echo "⚠️ Important Security Notes:"
+echo "=============================="
+echo "• Soft delete is enabled (7 days retention)"
+echo "• Access is logged to Log Analytics"
+echo "• Use managed identities for application access"
+echo "• Regularly rotate secrets and keys"
+echo "• Monitor access logs for suspicious activity"
+echo "• Use Key Vault references in App Service/Function Apps"
+echo ""
+echo "🌟 Your secure secret management solution is ready!"
+
+##############################
+######## END - SCRIPT ########
+##############################

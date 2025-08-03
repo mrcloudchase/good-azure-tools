@@ -1,0 +1,427 @@
+#!/bin/bash
+###############################
+####### SCRIPT DETAILS ########
+# Name: Blob Storage with CDN
+# Purpose: Deploy scalable blob storage with Azure CDN for global content delivery
+# Category: storage
+# Estimated Cost: $10-30/month (depends on usage)
+# Deployment Time: 5-8 minutes
+# Disclaimer: This script is intended for ACG Azure Cloud Sandbox environments
+###############################
+
+##############################
+##### START - VARIABLES ######
+##############################
+
+# Get resource group and set to variable $rg
+rg=$(az group list --query '[].name' -o tsv)
+
+# Assign location variable to playground resource group location
+location=$(az group list --query '[].location' -o tsv)
+
+# Storage account configuration
+storageAccountName="storage$(shuf -i 10000-99999 -n 1)"
+containerName="content"
+cdnProfileName="cdn-profile-$(shuf -i 1000-9999 -n 1)"
+cdnEndpointName="cdn-endpoint-$(shuf -i 1000-9999 -n 1)"
+
+# Performance and redundancy settings
+storageSku="Standard_LRS"
+storageKind="StorageV2"
+accessTier="Hot"
+
+##############################
+##### END - VARIABLES ########
+##############################
+
+##############################
+####### START - SCRIPT #######
+##############################
+
+echo "🚀 Starting Blob Storage + CDN deployment..."
+
+## CREATE STORAGE ACCOUNT
+echo "💾 Creating storage account..."
+az storage account create \
+    --name $storageAccountName \
+    --resource-group $rg \
+    --location $location \
+    --sku $storageSku \
+    --kind $storageKind \
+    --access-tier $accessTier \
+    --allow-blob-public-access true \
+    --https-only true \
+    --min-tls-version TLS1_2
+
+echo "✅ Storage account created!"
+
+## GET STORAGE ACCOUNT KEY
+echo "🔑 Retrieving storage account key..."
+storageKey=$(az storage account keys list \
+    --resource-group $rg \
+    --account-name $storageAccountName \
+    --query '[0].value' -o tsv)
+
+echo "✅ Storage key retrieved!"
+
+## CREATE BLOB CONTAINER
+echo "📦 Creating blob container..."
+az storage container create \
+    --name $containerName \
+    --account-name $storageAccountName \
+    --account-key $storageKey \
+    --public-access blob
+
+echo "✅ Blob container created!"
+
+## ENABLE STATIC WEBSITE HOSTING
+echo "🌐 Enabling static website hosting..."
+az storage blob service-properties update \
+    --account-name $storageAccountName \
+    --account-key $storageKey \
+    --static-website \
+    --404-document 404.html \
+    --index-document index.html
+
+echo "✅ Static website hosting enabled!"
+
+## CREATE SAMPLE CONTENT
+echo "📝 Creating sample content..."
+
+# Create sample HTML file
+cat > index.html << EOF
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Azure Blob Storage + CDN</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 40px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+        .feature {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 10px;
+            border-left: 4px solid #00d4ff;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+        .stat-card {
+            background: rgba(255, 255, 255, 0.15);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #00d4ff;
+        }
+        .code-block {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            margin: 15px 0;
+            overflow-x: auto;
+        }
+        .emoji {
+            font-size: 1.5em;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Azure Blob Storage + CDN</h1>
+        
+        <div class="feature">
+            <h2><span class="emoji">✅</span>Successfully Deployed!</h2>
+            <p>Your Azure Blob Storage account with CDN is now running and serving content globally.</p>
+        </div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-number">99.9%</div>
+                <div>Availability SLA</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">150+</div>
+                <div>Edge Locations</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">&lt;100ms</div>
+                <div>Latency</div>
+            </div>
+        </div>
+
+        <div class="feature">
+            <h3><span class="emoji">🌍</span>Global Content Delivery</h3>
+            <p>Your content is now cached across Azure's global CDN network for fast delivery worldwide.</p>
+        </div>
+
+        <div class="feature">
+            <h3><span class="emoji">💾</span>Scalable Storage</h3>
+            <p>Store and serve any amount of unstructured data with Azure Blob Storage.</p>
+        </div>
+
+        <div class="feature">
+            <h3><span class="emoji">🔒</span>Secure & Reliable</h3>
+            <p>Enterprise-grade security with encryption at rest and in transit.</p>
+        </div>
+
+        <div class="feature">
+            <h3><span class="emoji">📊</span>Usage Examples</h3>
+            <p>Perfect for:</p>
+            <ul>
+                <li>Static website hosting</li>
+                <li>Image and video delivery</li>
+                <li>Software distribution</li>
+                <li>Document storage</li>
+                <li>Backup and archival</li>
+            </ul>
+        </div>
+
+        <div class="feature">
+            <h3><span class="emoji">💻</span>Upload Content via CLI</h3>
+            <div class="code-block">
+az storage blob upload \\<br>
+&nbsp;&nbsp;--account-name $storageAccountName \\<br>
+&nbsp;&nbsp;--container-name $containerName \\<br>
+&nbsp;&nbsp;--name "myfile.jpg" \\<br>
+&nbsp;&nbsp;--file "path/to/myfile.jpg"
+            </div>
+        </div>
+
+        <p style="text-align: center; margin-top: 40px; opacity: 0.8;">
+            Powered by Azure Blob Storage + CDN
+        </p>
+    </div>
+
+    <script>
+        // Add some interactivity
+        document.addEventListener('DOMContentLoaded', function() {
+            const cards = document.querySelectorAll('.stat-card, .feature');
+            cards.forEach(card => {
+                card.addEventListener('mouseenter', function() {
+                    this.style.transform = 'translateY(-5px)';
+                    this.style.transition = 'transform 0.3s ease';
+                });
+                card.addEventListener('mouseleave', function() {
+                    this.style.transform = 'translateY(0)';
+                });
+            });
+        });
+    </script>
+</body>
+</html>
+EOF
+
+# Create 404 error page
+cat > 404.html << EOF
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>404 - Page Not Found</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            text-align: center;
+            padding: 50px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+        }
+        h1 { font-size: 3em; margin-bottom: 20px; }
+        p { font-size: 1.2em; }
+        .error-code { font-size: 6em; font-weight: bold; opacity: 0.5; }
+    </style>
+</head>
+<body>
+    <div class="error-code">404</div>
+    <h1>Oops! Page Not Found</h1>
+    <p>The page you're looking for doesn't exist.</p>
+    <p><a href="/" style="color: #00d4ff;">← Back to Home</a></p>
+</body>
+</html>
+EOF
+
+# Upload sample files
+az storage blob upload \
+    --account-name $storageAccountName \
+    --account-key $storageKey \
+    --container-name '$web' \
+    --name index.html \
+    --file index.html \
+    --content-type "text/html"
+
+az storage blob upload \
+    --account-name $storageAccountName \
+    --account-key $storageKey \
+    --container-name '$web' \
+    --name 404.html \
+    --file 404.html \
+    --content-type "text/html"
+
+# Clean up local files
+rm index.html 404.html
+
+echo "✅ Sample content uploaded!"
+
+## CREATE CDN PROFILE
+echo "🌍 Creating CDN profile..."
+az cdn profile create \
+    --resource-group $rg \
+    --name $cdnProfileName \
+    --location $location \
+    --sku Standard_Microsoft
+
+echo "✅ CDN profile created!"
+
+## GET STORAGE ENDPOINT
+storageEndpoint=$(az storage account show \
+    --name $storageAccountName \
+    --resource-group $rg \
+    --query 'primaryEndpoints.web' -o tsv | sed 's/https:\/\///' | sed 's/\///')
+
+## CREATE CDN ENDPOINT
+echo "🔗 Creating CDN endpoint..."
+az cdn endpoint create \
+    --resource-group $rg \
+    --profile-name $cdnProfileName \
+    --name $cdnEndpointName \
+    --origin $storageEndpoint \
+    --origin-host-header $storageEndpoint \
+    --origin-path "" \
+    --query-string-caching-behavior IgnoreQueryString \
+    --http-allowed true \
+    --https-allowed true
+
+echo "✅ CDN endpoint created!"
+
+## CONFIGURE CDN CACHING RULES
+echo "⚙️ Configuring CDN caching rules..."
+az cdn endpoint rule add \
+    --resource-group $rg \
+    --profile-name $cdnProfileName \
+    --endpoint-name $cdnEndpointName \
+    --order 1 \
+    --rule-name "CacheStaticContent" \
+    --match-variable RequestUri \
+    --operator Contains \
+    --match-values "*.css" "*.js" "*.png" "*.jpg" "*.gif" "*.pdf" \
+    --action-name CacheExpiration \
+    --cache-behavior Override \
+    --cache-duration 7.00:00:00
+
+echo "✅ CDN caching rules configured!"
+
+## GET ENDPOINTS AND URLS
+staticWebsiteUrl=$(az storage account show \
+    --name $storageAccountName \
+    --resource-group $rg \
+    --query 'primaryEndpoints.web' -o tsv)
+
+cdnUrl="https://$cdnEndpointName.azureedge.net"
+
+blobUrl=$(az storage account show \
+    --name $storageAccountName \
+    --resource-group $rg \
+    --query 'primaryEndpoints.blob' -o tsv)
+
+## OUTPUT INFORMATION
+echo ""
+echo "🎉 Blob Storage + CDN deployment completed successfully!"
+echo ""
+echo "📋 Deployment Summary:"
+echo "====================="
+echo "Storage Account: $storageAccountName"
+echo "Container: $containerName"
+echo "CDN Profile: $cdnProfileName"
+echo "CDN Endpoint: $cdnEndpointName"
+echo "Storage SKU: $storageSku"
+echo "Access Tier: $accessTier"
+echo ""
+echo "🌐 Access URLs:"
+echo "==============="
+echo "Static Website: $staticWebsiteUrl"
+echo "CDN Endpoint: $cdnUrl"
+echo "Blob Storage: $blobUrl"
+echo ""
+echo "📦 Container Information:"
+echo "========================"
+echo "Container Name: $containerName"
+echo "Public Access: Blob (anonymous read access)"
+echo "Content Type: Static web content"
+echo ""
+echo "🔧 Management Commands:"
+echo "========================"
+echo "Upload file to blob container:"
+echo "  az storage blob upload \\"
+echo "    --account-name $storageAccountName \\"
+echo "    --container-name $containerName \\"
+echo "    --name \"filename.ext\" \\"
+echo "    --file \"path/to/file\""
+echo ""
+echo "List blobs in container:"
+echo "  az storage blob list \\"
+echo "    --account-name $storageAccountName \\"
+echo "    --container-name $containerName \\"
+echo "    --output table"
+echo ""
+echo "Purge CDN cache:"
+echo "  az cdn endpoint purge \\"
+echo "    --resource-group $rg \\"
+echo "    --profile-name $cdnProfileName \\"
+echo "    --name $cdnEndpointName \\"
+echo "    --content-paths \"/*\""
+echo ""
+echo "🔗 Portal Links:"
+echo "Storage Account: https://portal.azure.com/#resource/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$rg/providers/Microsoft.Storage/storageAccounts/$storageAccountName"
+echo "CDN Profile: https://portal.azure.com/#resource/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$rg/providers/Microsoft.Cdn/profiles/$cdnProfileName"
+echo ""
+echo "⚠️ Important Notes:"
+echo "- CDN propagation may take 5-10 minutes"
+echo "- Static website hosting is enabled"
+echo "- HTTPS is enforced for security"
+echo "- Caching rules are configured for static content"
+echo "- Public blob access is enabled for the container"
+echo ""
+echo "💡 Tips:"
+echo "- Use the CDN URL for production traffic"
+echo "- Monitor usage and costs in Azure Portal"
+echo "- Configure custom domains for branded URLs"
+echo "- Set appropriate cache-control headers"
+echo ""
+echo "🌟 Your global content delivery network is ready!"
+
+##############################
+######## END - SCRIPT ########
+##############################
